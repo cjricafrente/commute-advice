@@ -1,56 +1,121 @@
 <!doctype html>
-<html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rain or Shine: Test</title>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rain or Shine</title>
 <style>
-  body { font-family: system-ui, Arial, sans-serif; padding: 24px; }
-  h1 { margin: 0 0 12px; }
-  pre { white-space: pre-wrap; background: #f6f6f6; padding: 12px; border-radius: 6px; }
-  .ok { color: #0a7; font-weight: 800; font-size: 40px; }
-  .err { color: #c33; font-weight: 800; font-size: 24px; }
+  :root { --pad: 24px; }
+  body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: var(--pad); text-align: center; background: #fff; }
+  header { font-weight: 700; font-size: 20px; margin-bottom: 6px; }
+  .chip { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #f2f2f2; font-size: 12px; margin-left: 8px; }
+  .tile { font-size: 64px; font-weight: 900; margin: 16px 0 6px; letter-spacing: 1px; }
+  .ok { color: #0a7; }
+  .wait { color: #c33; }
+  .sub { color: #555; margin: 6px 0 18px; }
+  .row { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+  button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ddd; background: #fafafa; cursor: pointer; }
+  button:hover { background: #f0f0f0; }
+  #chart { max-width: 360px; margin: 8px auto 0; }
+  svg { width: 100%; height: 160px; }
+  rect { fill: #888; }
+  rect.max { fill: #c33; }
+  .foot { font-size: 12px; color: #777; margin-top: 22px; }
 </style>
 </head>
 <body>
-  <h1>Rain or Shine (Test Page)</h1>
-  <div id="advice">Loading…</div>
-  <pre id="details"></pre>
+  <header>Rain or Shine <span class="chip" id="loc">loading…</span></header>
+  <div id="status" class="tile">Loading…</div>
+  <div id="details" class="sub"></div>
+  <div id="chart"></div>
+  <div class="row">
+    <button id="useMe">Use my location</button>
+    <button id="refresh">Refresh</button>
+  </div>
+  <div class="foot">Tip: Adjust threshold & ahead hours via URL, e.g. <code>?threshold=70&ahead=4</code></div>
 
 <script>
-(async function() {
-  const API = "https://tcetiv24ylpbcj4745rwi6qgjm0awkdt.lambda-url.ap-southeast-1.on.aws/"; // your Function URL
+const API = "https://tcetiv24ylpbcj4745rwi6qgjm0awkdt.lambda-url.ap-southeast-1.on.aws/"; 
 
-  const adviceEl = document.getElementById('advice');
-  const detailsEl = document.getElementById('details');
+function qsFromUrl() {
+  const p = new URLSearchParams(location.search);
+  const out = {};
+  if (p.has("threshold")) out.threshold = p.get("threshold");
+  if (p.has("ahead")) out.ahead = p.get("ahead");
+  return out;
+}
+
+async function callApi(params={}) {
+  const u = new URL(API);
+  Object.entries(params).forEach(([k,v]) => u.searchParams.set(k, v));
+  const r = await fetch(u.toString());
+  const text = await r.text();
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0,160)}`);
+  try { return JSON.parse(text); } catch(e) { throw new Error(`Bad JSON: ${text.slice(0,160)}`); }
+}
+
+function renderBars(el, hours) {
+  if (!hours || !hours.length) { el.innerHTML = ""; return; }
+  const maxProb = Math.max(...hours.map(h => h.prob), 1);
+  const labels = hours.map(h => h.hhmm);
+  const W = 360, H = 160, bottom = 20, top = 8;
+  const bw = Math.floor(W / hours.length);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" aria-label="Rain probabilities">`;
+  hours.forEach((h, i) => {
+    const hgt = Math.round((h.prob / 100) * (H - bottom - top));
+    const x = i * bw + 6, y = (H - bottom) - hgt;
+    const cls = (h.prob === maxProb) ? "max" : "";
+    svg += `<rect class="${cls}" x="${x}" y="${y}" width="${bw - 12}" height="${hgt}" rx="4" ry="4"></rect>`;
+    svg += `<text x="${x}" y="${H - 6}" font-size="10">${h.hhmm}</text>`;
+  });
+  svg += `</svg>`;
+  el.innerHTML = svg;
+}
+
+async function show(params) {
+  const status = document.getElementById('status');
+  const details = document.getElementById('details');
+  const loc = document.getElementById('loc');
+
+  status.textContent = "Loading…"; status.className = "tile";
+  details.textContent = ""; loc.textContent = "…";
 
   try {
-    const resp = await fetch(API);
-    const text = await resp.text();
-
-    if (!resp.ok) {
-      adviceEl.className = "err";
-      adviceEl.textContent = `HTTP ${resp.status}`;
-      detailsEl.textContent = text.slice(0, 500);
-      return;
-    }
-
-    let data;
-    try { data = JSON.parse(text); }
-    catch(e) {
-      adviceEl.className = "err";
-      adviceEl.textContent = "Bad JSON";
-      detailsEl.textContent = text.slice(0, 500);
-      return;
-    }
-
-    const advice = String(data.advice || "LEAVE").toUpperCase();
-    adviceEl.className = advice === "WAIT" ? "err" : "ok";
-    adviceEl.textContent = advice;
-    detailsEl.textContent = JSON.stringify(data, null, 2);
+    const j = await callApi(params);
+    const advice = String(j.advice || "LEAVE").toUpperCase();
+    status.textContent = advice;
+    status.className = advice === "WAIT" ? "tile wait" : "tile ok";
+    const parts = [];
+    if (j.window) parts.push(`Window: ${j.window}`);
+    if (typeof j.max_rain_prob === "number") parts.push(`Max rain: ${j.max_rain_prob}%`);
+    if (j.as_of) parts.push(`As of: ${j.as_of}`);
+    if (j.notes) parts.push(j.notes);
+    details.textContent = parts.join(" • ");
+    loc.textContent = j.city || "Unknown";
+    renderBars(document.getElementById("chart"), j.hours || []);
   } catch (e) {
-    adviceEl.className = "err";
-    adviceEl.textContent = "Fetch failed";
-    detailsEl.textContent = String(e);
+    status.textContent = "Error"; status.className = "tile wait";
+    details.textContent = String(e);
   }
-})();
+}
+
+async function useMyLocation() {
+  const base = qsFromUrl();
+  if (!("geolocation" in navigator)) return show(base);
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      show({ ...base, lat: pos.coords.latitude, lon: pos.coords.longitude });
+    },
+    _err => show(base),
+    { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
+  );
+}
+
+document.getElementById("useMe").addEventListener("click", useMyLocation);
+document.getElementById("refresh").addEventListener("click", () => show(qsFromUrl()));
+
+// On first load: try GPS (works because GitHub Pages is HTTPS); fallback to defaults
+useMyLocation();
 </script>
-</body></html>
+</body>
+</html>
