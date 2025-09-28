@@ -40,3 +40,7 @@ Result: effectively **₱0/month**.
 ## Notes
 - Try `?threshold=70&ahead=4` on the URL.
 - Button **Use my location** requests GPS (works because Pages is HTTPS).
+
+## Sample Screenshot
+<img width="1193" height="404" alt="image" src="https://github.com/user-attachments/assets/a40b6442-ee88-4188-8358-46cc1d2b242f" />
+
