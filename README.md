@@ -3,7 +3,7 @@
 A lightweight serverless web app that turns live weather forecasts into a clear decision: **LEAVE now** or **WAIT**.  
 It combines live external data, on-demand compute, managed storage, and a static web interface into one cohesive system.
 
-👉 Demo: https://<your-username>.github.io/commute-advice/
+👉 Demo: https://cjricafrente.github.io/commute-advice/
 
 ## Highlights
 - **Live data ingestion** (Open-Meteo) on demand
